@@ -60,19 +60,21 @@ class _Visuals extends State<Visuals> {
 
   static List<charts.Series<GenderData, String>> _createSampleData(int m,int f) {
     final sent = [
-      new GenderData(0, "Male", m),
       new GenderData(1, "Female",f ),
+      new GenderData(0, "Male", m),
 
     ];
 
     return [
       new charts.Series<GenderData, String>(
-        id: 'Messages',
-        domainFn: (GenderData m, _) => m.type,
-        measureFn: (GenderData m, _) => m.total,
+        id: 'Gender',
+        colorFn: (GenderData d, __) => d.index==0?
+        charts.MaterialPalette.blue.shadeDefault:
+        charts.MaterialPalette.pink.shadeDefault,
+        domainFn: (GenderData g, _) => g.type,
+        measureFn: (GenderData g, _) => g.total,
         data: sent,
         labelAccessorFn: (GenderData row, _) => '${row.type}: ${row.total}',
-        fillColorFn: (messages, color) => charts.Color.fromHex(),
       )
     ];
   }
@@ -83,8 +85,8 @@ class _Visuals extends State<Visuals> {
 
 class GenderData {
   final int index;
-  final int total;
   final String type;
+  final int total;
 
   GenderData(this.index, this.type, this.total);
 }

@@ -10,12 +10,15 @@
 // bar items. The first one is selected.](https://flutter.github.io/assets-for-api-docs/assets/material/bottom_navigation_bar.png)
 
 import 'dart:io';
+import 'dart:math';
 import 'dart:convert';
 import 'dart:convert' show utf8;
 import 'package:flutter/material.dart';
 import 'package:armour_app/visualization2.dart';
 import 'package:armour_app/visualization1.dart';
 import 'package:armour_app/Model/elastic.dart';
+import 'package:dio/dio.dart';
+import 'package:dio_flutter_transformer/dio_flutter_transformer.dart';
 
 void main() => runApp(MyApp());
 
@@ -49,6 +52,13 @@ class _MyStatefulWidgetState extends State<MyStatefulWidget> {
   int nyCount=0;
   bool loading = false;
 
+  int hits = 0;
+  String queryString ='';
+  bool search = false;
+
+  int _key = 123;
+  bool check = false;
+
   static const TextStyle optionStyle =
       TextStyle(fontSize: 30, fontWeight: FontWeight.bold);
 
@@ -67,67 +77,131 @@ class _MyStatefulWidgetState extends State<MyStatefulWidget> {
     getData('state:California');
     getData('state:Washington');
     getData('state:New York');
+    //getData('gender:male AND state:california');
   }
 
   @override
   Widget build(BuildContext context) {
-    if(loading==true)
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Project Armour'),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children:[
+              Icon(Icons.security),
+              Text('Project Armour'),
+            ]
+          ),
+          backgroundColor: Colors.cyan,
         ),
-        body: Center(
-          child: _selectedIndex == 0 ? Visuals(maleCount,femaleCount) : _selectedIndex == 1
-              ? Visualization(caCount,waCount,nyCount)
-              : Text("Coming soon..."), //show  graph here
-        ),
-        bottomNavigationBar: BottomNavigationBar(
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.insert_emoticon),
-              title: Text('Gender'),
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.language),
-              title: Text('Countrty'),
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.insert_chart),
-              title: Text('Age'),
+        floatingActionButton:
+          new FloatingActionButton(
+            onPressed: _tapRefreshData, //open new activity
+            backgroundColor: Colors.blue[400],
+            mini: false,
+            child:
+              new Icon(
+                Icons.refresh
+              ),
+          ),
+        body:
+        NestedScrollView(
+          headerSliverBuilder: (context, boxScrolled) => [
+            SliverAppBar(
+              backgroundColor: Colors.transparent,
+              flexibleSpace:
+              Container(
+                margin: EdgeInsets.only(left: 10.0),
+                child:
+                  TextField(
+                    keyboardType: TextInputType.text,
+                    decoration: InputDecoration(hintText: 'Search ( \'field_name : value\' for accurate result )'),
+                    onSubmitted: getSearchQuery,
+                  )
+              ),
+              floating: true,
             ),
           ],
-          currentIndex: _selectedIndex,
-          //selectedItemColor: Colors.amber[800],
-          fixedColor: Colors.cyan,
-          onTap: _onItemTapped,
+          body:
+            Center(
+              child: _selectedIndex == 0?
+                testData()
+                :_selectedIndex == 1?
+                Text("Coming soon...")
+                : Text("Coming soon..."), //show  graph here
+            )
         ),
-
+        bottomNavigationBar:
+          BottomNavigationBar(
+            items:
+              const <BottomNavigationBarItem>[
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.build),
+                  title: Text('Test Data'),
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.cloud),
+                  title: Text('Server Data'),
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.shopping_cart),
+                  title: Text('Sales Data'),
+                ),
+              ],
+            currentIndex: _selectedIndex,
+            //selectedItemColor: Colors.amber[800],
+            fixedColor: Colors.cyan,
+            onTap: _onItemTapped,
+        ),
       );
+  }
 
-    else return Container(
-        color: Colors.white,
-        child: new Center(
-            child: CircularProgressIndicator()
-        )
+  Widget testData(){
+    return  ListView(
+        children:[
+          search?
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children:[
+              Text('Total hits for ' + queryString+' : '+ hits.toString(),
+              style: TextStyle(color: Colors.blue[700],fontSize:16))
+            ],
+          )
+          : LimitedBox(),
+          Divider(height: 20,color:Colors.transparent),
+          ExpansionTile(
+            leading: Icon(Icons.insert_chart,color:Colors.cyan),
+            initiallyExpanded: check,
+            key: Key(_key.toString()),
+            title: Text("View Sample Visualizations"),
+            children:[
+              Visuals(maleCount,femaleCount),
+              Divider(height: 20,color:Colors.transparent),
+              Visualization(caCount,waCount,nyCount),
+            ]
+          )
+        ]
     );
   }
 
-  void getData(String text) async{
-    var link = 'https://search-project-armour-phbfhe2v26gnfcbxbwa6p2wrva.us-east-2.es.amazonaws.com/users/_search?q='+text;
-    Uri apiUri = Uri.parse(link);
-    HttpClientRequest request = await new HttpClient().getUrl(apiUri);
-    HttpClientResponse response = await request.close();
-    Stream resStream = response.transform(utf8.decoder);
-
-    await for (var data in resStream){
-       _parseJson(data,text);
-    }
+  _collapse() {
+    int newKey;
+    do {
+      _key = new Random().nextInt(10000);
+      check = false;
+    } while (newKey == _key);
   }
 
-  void  _parseJson(String jsonString,String text) {
-    Map previewMap = json.decode(jsonString);
-    Elastic els = Elastic.fromJson(previewMap);
+  /// --------------
+  /// Controller Code
+  /// ---------------
 
+  void getData(String text) async{
+    var dio = Dio();
+    dio.transformer = new FlutterTransformer();
+    Response response =
+    await dio.get('https://search-project-armour-phbfhe2v26gnfcbxbwa6p2wrva.us-east-2.es.amazonaws.com/users/_search?q='+text);
+    Map previewMap = json.decode(response.toString());
+    Elastic els = Elastic.fromJson(previewMap);
     setState(() {
       if(text=='gender:Female')
         femaleCount = els.hits.total;
@@ -141,6 +215,33 @@ class _MyStatefulWidgetState extends State<MyStatefulWidget> {
         nyCount = els.hits.total;
 
       loading = true;
+    });
+  }
+
+  void _tapRefreshData(){
+
+    getData('gender:Female');
+    getData('gender:Male');
+    getData('state:California');
+    getData('state:Washington');
+    getData('state:New York');
+    //getData('gender:male AND state:california');
+  }
+
+  getSearchQuery(String text) async {
+    setState(() {
+      search=false;
+    });
+    var dio = Dio();
+    dio.transformer = new FlutterTransformer();
+    Response response =
+    await dio.get('https://search-project-armour-phbfhe2v26gnfcbxbwa6p2wrva.us-east-2.es.amazonaws.com/users/_search?q='+text);
+    Map previewMap = json.decode(response.toString());
+    Elastic els = Elastic.fromJson(previewMap);
+    setState(() {
+      queryString = text;
+      hits = els.hits.total;
+      search=true;
     });
   }
 
